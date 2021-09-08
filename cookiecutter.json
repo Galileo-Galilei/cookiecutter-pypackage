@@ -1,0 +1,12 @@
+{
+    "full_name": "Yolan Honoré-Rougé",
+    "email": "galileo.galilei.github@gmail.com",
+    "github_username": "Galileo-Galilei",
+    "project_name": "my-awesome-package",
+    "package_name": "{{ cookiecutter.project_name.lower().replace(' ', '_').replace('-', '_') }}",
+    "project_short_description": "This package does something awesome",
+    "pypi_username": "{{ cookiecutter.github_username }}",
+    "github_project_path": "{{ 'https://github.com/'+cookiecutter.github_username+'/'+cookiecutter.project_name }}",
+    "main_branch_name": "main",
+    "year": "{% now 'utc', '%Y' %}"
+}

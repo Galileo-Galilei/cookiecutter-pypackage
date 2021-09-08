@@ -1,0 +1,62 @@
+name: create-release-candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_part:
+        description: The part of the version to update (patch, minor or major)
+        required: true
+        default: 'minor'
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7]
+    env:
+      PYTHON_PACKAGE: {{ cookiecutter.package_name }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python {% raw %} ${{ matrix.python-version }} {%- endraw %}
+      uses: actions/setup-python@v1
+      with:
+        python-version: {% raw %} ${{ matrix.python-version }} {%- endraw %}
+    - name: Validate inputs
+      run: |
+        echo "INPUT_VERSION_PART: {% raw %} ${{ github.event.inputs.version_part }}" {%- endraw %}
+        python -c "if '{% raw %}${{ github.event.inputs.version_part }}{%- endraw %}' not in ['patch', 'minor', 'major']:   raise ValueError(\"'{% raw %}${{ github.event.inputs.version_part }}{%- endraw %}' must be one of ['patch', 'minor', 'major'])\")"
+    - name: Bump the version number  # bump2version is a maintained fork of original bumpversion
+      id: bump_version
+      run: |
+        pip install bump2version
+        bump2version {% raw %}${{ github.event.inputs.version_part }}{%- endraw %}
+        echo "::set-output name=package_version::$(cat $PYTHON_PACKAGE/__init__.py | grep -Po  '\d+\.\d+\.\d+')"
+    - name: Update the CHANGELOG according to 'Keep a Changelog' guidelines
+      uses: thomaseizinger/keep-a-changelog-new-release@v1
+      with:
+        version: {% raw %}${{ steps.bump_version.outputs.package_version }}{%- endraw %}
+    - name: Create a new release branch
+      run: |
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+        git checkout -b release-{% raw %}${{ steps.bump_version.outputs.package_version }}{%- endraw %}
+        git push -u origin release-{% raw %}${{ steps.bump_version.outputs.package_version }}{%- endraw %}
+    - name: Commit the changes
+      run: |
+        git commit -am "Bump version and CHANGELOG for release {% raw %}${{ steps.bump_version.outputs.package_version }}{%- endraw %}"
+        git push
+    - name: Open a PR to merge the release to {{ cookiecutter.main_branch_name }}
+      id: open_pr
+      uses: vsoch/pull-request-action@1.0.12
+      env:
+        GITHUB_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{%- endraw %}
+        PULL_REQUEST_BRANCH: {{ cookiecutter.main_branch_name }}
+        PULL_REQUEST_FROM_BRANCH: release-{% raw %}${{ steps.bump_version.outputs.package_version }}{%- endraw %}
+        PULL_REQUEST_TITLE: "Release {% raw %}${{ steps.bump_version.outputs.package_version }}{%- endraw %}"
+        PULL_REQUEST_BODY: "Bump version and CHANGELOG for next release."
+        PULL_REQUEST_ASSIGNEES: "{% raw %}${{ github.repository_owner }}{%- endraw %}"
+    - name: Change the commit message to add PR number
+      run: |
+        git commit -a --amend -m ":rocket: Bump version and CHANGELOG for release {% raw %}${{ steps.bump_version.outputs.package_version }}{%- endraw %} (#{% raw %}${{ steps.open_pr.outputs.pull_request_number }}{%- endraw %})"
+        git push -f
